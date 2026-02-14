@@ -20,6 +20,6 @@ output "app_instance_id" {
 
 output "app_image_uri" {
   description = "Container image URI used by app user_data."
-  value       = var.app_image_uri
+  value       = local.app_image_effective
 }
 

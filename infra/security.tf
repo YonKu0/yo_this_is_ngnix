@@ -1,69 +1,76 @@
 resource "aws_security_group" "alb" {
   name        = "${var.name_prefix}-alb-sg"
-  description = "ALB ingress from internet; egress only to app port in private subnet."
+  description = "ALB ingress from internet; egress only to app port in app SG."
   vpc_id      = aws_vpc.this.id
-
-  ingress {
-    description = "HTTP from internet"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "To app port in private subnet"
-    from_port   = var.app_port
-    to_port     = var.app_port
-    protocol    = "tcp"
-    cidr_blocks = [var.private_subnet_cidr]
-  }
 
   tags = merge(local.common_tags, {
     Name = "${var.name_prefix}-alb-sg"
   })
 }
 
+# Use dedicated rule resources to avoid dependency cycles when referencing SGs each way.
+resource "aws_vpc_security_group_ingress_rule" "alb_http_from_internet" {
+  security_group_id = aws_security_group.alb.id
+  description       = "HTTP from internet"
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
+  security_group_id            = aws_security_group.alb.id
+  description                  = "To app port in app SG"
+  ip_protocol                  = "tcp"
+  from_port                    = var.app_port
+  to_port                      = var.app_port
+  referenced_security_group_id = aws_security_group.app.id
+}
+
 resource "aws_security_group" "app" {
   name        = "${var.name_prefix}-app-sg"
-  description = "App EC2: only ALB can reach the app port."
+  description = "App EC2: app port reachable only from ALB SG."
   vpc_id      = aws_vpc.this.id
-
-  ingress {
-    description     = "App port from ALB SG"
-    from_port       = var.app_port
-    to_port         = var.app_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "HTTPS for package installs, ECR auth/pull, and service APIs"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "DNS UDP to VPC resolver"
-    from_port   = 53
-    to_port     = 53
-    protocol    = "udp"
-    cidr_blocks = [format("%s/32", cidrhost(var.vpc_cidr, 2))]
-  }
-
-  egress {
-    description = "DNS TCP to VPC resolver"
-    from_port   = 53
-    to_port     = 53
-    protocol    = "tcp"
-    cidr_blocks = [format("%s/32", cidrhost(var.vpc_cidr, 2))]
-  }
 
   tags = merge(local.common_tags, {
     Name = "${var.name_prefix}-app-sg"
   })
+}
+
+resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
+  security_group_id            = aws_security_group.app.id
+  description                  = "App port from ALB SG"
+  ip_protocol                  = "tcp"
+  from_port                    = var.app_port
+  to_port                      = var.app_port
+  referenced_security_group_id = aws_security_group.alb.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_https" {
+  security_group_id = aws_security_group.app.id
+  description       = "HTTPS for package installs, ECR auth/pull, and service APIs"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_dns_udp" {
+  security_group_id = aws_security_group.app.id
+  description       = "DNS UDP to VPC resolver"
+  ip_protocol       = "udp"
+  from_port         = 53
+  to_port           = 53
+  cidr_ipv4         = format("%s/32", cidrhost(var.vpc_cidr, 2))
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_dns_tcp" {
+  security_group_id = aws_security_group.app.id
+  description       = "DNS TCP to VPC resolver"
+  ip_protocol       = "tcp"
+  from_port         = 53
+  to_port           = 53
+  cidr_ipv4         = format("%s/32", cidrhost(var.vpc_cidr, 2))
 }
 
 resource "aws_security_group" "nat" {

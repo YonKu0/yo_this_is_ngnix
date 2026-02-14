@@ -18,7 +18,7 @@ resource "aws_instance" "app" {
 
   user_data = templatefile("${path.module}/templates/user_data_app.sh.tftpl", {
     app_port      = var.app_port
-    app_image_uri = var.app_image_uri
+    app_image_uri = local.app_image_effective
     aws_region    = var.region
   })
 
@@ -28,7 +28,8 @@ resource "aws_instance" "app" {
   })
 
   depends_on = [
-    aws_route.private_default
+    aws_route.private_default,
+    null_resource.build_and_push_image
   ]
 }
 

@@ -67,13 +67,12 @@ variable "app_port" {
 }
 
 variable "app_image_uri" {
-  description = "Full container image URI used by the app instance (recommended: private ECR image with immutable tag, e.g. <account>.dkr.ecr.<region>.amazonaws.com/repo:<sha>). Default points to the assignment ECR repo latest tag for one-click apply in this account; override via -var or .tfvars in other accounts/environments."
+  description = "Full container image URI used by the app instance. If empty, Terraform will build and push the Docker image to ECR during `terraform apply` (one-click install). If set, Terraform will use the provided image URI and skip local build/push (CI/production-style flow)."
   type        = string
-  default     = "689254730158.dkr.ecr.us-east-1.amazonaws.com/yo-this-is-ngnix-app:latest"
+  default     = ""
 
   validation {
-    condition     = can(regex(".+/.+:.+", var.app_image_uri))
-    error_message = "app_image_uri must be a full image reference including tag (for example: 123456789012.dkr.ecr.us-east-1.amazonaws.com/yo-this-is-ngnix-app:abc123)."
+    condition     = var.app_image_uri == "" || can(regex(".+/.+:.+", var.app_image_uri))
+    error_message = "app_image_uri must be empty (to enable one-click build/push) or a full image reference including tag (for example: 123456789012.dkr.ecr.us-east-1.amazonaws.com/yo-this-is-ngnix-app:abc123)."
   }
 }
-

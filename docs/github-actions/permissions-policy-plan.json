@@ -88,7 +88,7 @@
       "Sid": "TerraformStateObjectsRead",
       "Effect": "Allow",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::yo-this-is-ngnix-tfstate-*/*"
+      "Resource": "arn:aws:s3:::yo-this-is-ngnix-tfstate-*/state/terraform.tfstate"
     }
   ]
 }

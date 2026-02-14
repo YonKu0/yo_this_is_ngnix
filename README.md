@@ -4,10 +4,10 @@ Deploy a dockerized NGINX app that is publicly reachable and returns exactly:
 yo this is nginx
 ```
 
-This repository demonstrates a production-style pattern:
+This repository supports both a one-click assignment path and a production-style pattern:
 - Build image once in CI (or manually), push to private ECR
 - Deploy infra with Terraform
-- EC2 in private subnet pulls the image tag provided by Terraform (CI uses immutable commit SHA; optional assignment fast path uses `latest`)
+- EC2 in private subnet pulls the image tag provided by Terraform (CI uses immutable commit SHA; if `app_image_uri` is empty, Terraform builds/pushes during apply)
 
 ## Architecture
 
@@ -95,18 +95,19 @@ export AWS_REGION=us-east-1
 aws sts get-caller-identity
 ```
 
-### 2) One-click apply in this assignment account (optional fast path)
+### 2) One-click apply (fully self-contained)
 
-The default `app_image_uri` already points to this account's published `latest` image, so you can run:
+If you do not provide `-var "app_image_uri=..."`, Terraform will build and push the Docker image to ECR during `terraform apply`,
+then deploy the private EC2 instance which pulls and runs it.
 
 ```bash
 terraform -chdir=infra init
 terraform -chdir=infra apply
 ```
 
-If you are deploying in a different AWS account, follow the build/push path below and pass `-var "app_image_uri=..."`.
+If you prefer the production-style flow (build in CI or manually), follow the build/push path below and pass `-var "app_image_uri=..."`.
 
-### 3) Build and push an amd64 image to ECR
+### 3) Build and push an amd64 image to ECR (production-style, optional)
 
 `amd64` is important because the current Terraform AMI/instance path is x86_64.
 
@@ -178,7 +179,7 @@ Workflow file: `.github/workflows/deploy.yml`
   - build and push image to ECR (`<commit_sha>`)
   - Terraform fmt/validate/plan
 - push to `main`:
-  - build and push image to ECR (`<commit_sha>` + `latest`)
+  - build and push image to ECR (`<commit_sha>`)
   - Terraform fmt/validate/plan
   - Terraform apply after `production` environment approval
   - post-apply smoke test validates response is exactly `yo this is nginx`

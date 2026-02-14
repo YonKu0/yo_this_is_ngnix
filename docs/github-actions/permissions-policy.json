@@ -168,7 +168,7 @@
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::yo-this-is-ngnix-tfstate-*/*"
+      "Resource": "arn:aws:s3:::yo-this-is-ngnix-tfstate-*/state/terraform.tfstate"
     }
   ]
 }

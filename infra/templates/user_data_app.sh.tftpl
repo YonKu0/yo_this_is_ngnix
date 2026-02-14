@@ -1,0 +1,92 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Retry until NAT is ready (up to 10 attempts, 60s apart)
+install_docker() {
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if command -v dnf >/dev/null 2>&1; then
+      dnf -y update
+      dnf -y install docker
+      if ! command -v curl >/dev/null 2>&1; then
+        dnf -y install curl-minimal || dnf -y install curl
+      fi
+      if ! command -v aws >/dev/null 2>&1; then
+        dnf -y install awscli || dnf -y install awscli2
+      fi
+      command -v aws >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && return 0
+    else
+      yum -y update
+      yum -y install docker
+      if ! command -v curl >/dev/null 2>&1; then
+        yum -y install curl
+      fi
+      if ! command -v aws >/dev/null 2>&1; then
+        yum -y install awscli
+      fi
+      command -v aws >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && return 0
+    fi
+    echo "Attempt $i/10 failed, retrying in 60s..."
+    sleep 60
+  done
+  echo "Giving up installing Docker."
+  return 1
+}
+install_docker
+
+systemctl enable --now docker
+
+# Wait for Docker daemon to be ready (socket available)
+until docker info >/dev/null 2>&1; do echo "Waiting for Docker..."; sleep 2; done
+
+IMAGE_URI="${app_image_uri}"
+AWS_REGION="${aws_region}"
+ECR_REGISTRY="$(echo "$IMAGE_URI" | cut -d/ -f1)"
+
+command -v aws >/dev/null 2>&1 || { echo "AWS CLI is required for ECR login."; exit 1; }
+
+ecr_login_with_retry() {
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"; then
+      return 0
+    fi
+    [ "$i" -eq 10 ] && { echo "Giving up ECR login."; return 1; }
+    echo "ECR login attempt $i/10 failed, retrying in 60s..."
+    sleep 60
+  done
+}
+
+pull_image_with_retry() {
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if docker pull "$IMAGE_URI"; then
+      return 0
+    fi
+    [ "$i" -eq 10 ] && { echo "Giving up docker pull for $IMAGE_URI."; return 1; }
+    echo "docker pull attempt $i/10 failed, retrying in 60s..."
+    sleep 60
+  done
+}
+
+ecr_login_with_retry
+pull_image_with_retry
+
+docker rm -f yo-nginx 2>/dev/null || true
+docker run -d \
+  --name yo-nginx \
+  --restart unless-stopped \
+  -p ${app_port}:80 \
+  "$IMAGE_URI"
+
+# Verify container is listening so ALB health checks can pass
+for i in $(seq 1 180); do
+  if curl -sf "http://127.0.0.1:${app_port}/health" >/dev/null; then
+    exit 0
+  fi
+  echo "Waiting for nginx... attempt $i/180"
+  sleep 2
+done
+
+echo "Nginx health check did not pass in time."
+docker ps -a || true
+docker logs --tail 100 yo-nginx || true
+exit 1
+

@@ -1,0 +1,47 @@
+#!/bin/bash
+set -euxo pipefail
+
+# Ensure iptables is present (Amazon Linux variants)
+if command -v dnf >/dev/null 2>&1; then
+  dnf -y update
+  dnf -y install iptables iptables-services || dnf -y install iptables
+else
+  yum -y update
+  yum -y install iptables-services || yum -y install iptables
+fi
+
+# Enable IP forwarding
+echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-nat.conf
+sysctl -p /etc/sysctl.d/99-nat.conf
+
+# Primary outbound interface (eth0 on older AMIs, ens5 on AL2023)
+OUT_IF="$(ip route show default | awk '/default/ {print $5}')"
+[ -z "$OUT_IF" ] && OUT_IF=eth0
+
+# Basic NAT with iptables
+iptables -t nat -A POSTROUTING -o "$OUT_IF" -j MASQUERADE
+iptables -A FORWARD -i "$OUT_IF" -o "$OUT_IF" -m state --state RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -s ${private_subnet_cidr} -j ACCEPT
+
+# Persist rules on reboot via a simple systemd unit
+mkdir -p /etc/iptables
+iptables-save > /etc/iptables/rules.v4
+
+cat > /etc/systemd/system/iptables-restore.service <<'UNIT'
+[Unit]
+Description=Restore iptables rules
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables-restore < /etc/iptables/rules.v4
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now iptables-restore.service
+

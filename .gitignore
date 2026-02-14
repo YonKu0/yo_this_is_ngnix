@@ -1,0 +1,22 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfstate.*.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform.tfvars
+tfplan
+*.tfplan
+
+# Commit provider dependency locks from the Terraform root module.
+!infra/.terraform.lock.hcl
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+

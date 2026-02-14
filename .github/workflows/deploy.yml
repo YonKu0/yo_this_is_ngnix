@@ -26,7 +26,7 @@ env:
 jobs:
   build_image:
     name: build-and-push-image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push'
     outputs:
       image_uri: ${{ steps.meta.outputs.image_uri }}
@@ -108,7 +108,7 @@ jobs:
 
   plan:
     name: fmt-validate-plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push'
     needs: [build_image]
     permissions:
@@ -201,7 +201,7 @@ jobs:
 
   apply:
     name: apply (production gate)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [plan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:

@@ -19,6 +19,17 @@ flowchart LR
   NatInst --> Internet
 ```
 
+## Security Posture (Assignment)
+
+- Public entry point is an internet-facing ALB on HTTP/80 (required for public access).
+- App EC2 is private: no public IP and deployed in the private subnet.
+- No SSH exposure: there are no port 22 security group rules; access is only through the ALB.
+- Security groups are SG-to-SG: ALB -> app only on `var.app_port`; app egress is restricted to HTTPS (443) and DNS to the VPC resolver.
+- Instance hardening: IMDSv2 is required; root EBS volumes are encrypted.
+- CI/CD uses GitHub OIDC (no static AWS keys) with separate plan/build vs apply roles; apply is gated via the GitHub `production` environment (required reviewers configured in GitHub).
+- Image immutability: ECR repo is IMMUTABLE; CI tags images by commit SHA (no `latest`).
+- Intentional assignment trade-offs: HTTP instead of HTTPS, NAT instance instead of NAT gateway, CI-managed state copy instead of native Terraform S3 backend + DynamoDB locking.
+
 ## Naming and Tagging Convention
 
 - Provider-level default tags are set in `infra/providers.tf`:
